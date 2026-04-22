@@ -61,7 +61,7 @@ button:hover {
 
 /* ERROR */
 .error {
-  color: #f87171;
+  color: #ff0000;
   font-size: 13px;
 }
 
@@ -72,14 +72,14 @@ button:hover {
 }
 
 .switch span {
-  color: #6366f1;
+  color: #4e51ff;
   cursor: pointer;
   font-weight: bold;
 }
 
 /* ADMIN */
 .card.admin {
-  border-top: 5px solid #7c3aed;
+  border-top: 5px solid #5a03f0;
 }
 
 /* WORKER */
