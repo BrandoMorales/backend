@@ -19,7 +19,7 @@ export default function Register({ goToLogin }) {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.name || !form.email || !form.password || !form.rol) {
@@ -31,18 +31,6 @@ export default function Register({ goToLogin }) {
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const existe = users.find((u) => u.email === form.email);
-
-    if (existe) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Usuario existente',
-        text: 'Este correo electrónico ya se encuentra registrado.',
-      });
-      return;
-    }
-
     const nuevoUsuario = {
       nombre: form.name,
       email: form.email,
@@ -50,18 +38,29 @@ export default function Register({ goToLogin }) {
       role: form.rol === "admin" ? "admin" : "trabajador"
     };
 
-    users.push(nuevoUsuario);
-    localStorage.setItem("users", JSON.stringify(users));
+    try {
+      const response = await fetch("http://localhost:5000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nuevoUsuario),
+      });
 
-    setRolStyle(nuevoUsuario.role === "admin" ? "admin" : "worker");
-
-    Swal.fire({
-      icon: 'success',
-      title: '¡Cuenta creada!',
-      text: 'Ya puedes iniciar sesión con tus credenciales.',
-      timer: 2000,
-      showConfirmButton: false
-    }).then(() => goToLogin());
+      if (response.ok) {
+        setRolStyle(nuevoUsuario.role === "admin" ? "admin" : "worker");
+        Swal.fire({
+          icon: 'success',
+          title: '¡Cuenta creada!',
+          text: 'Ya puedes iniciar sesión con tus credenciales.',
+          timer: 2000,
+          showConfirmButton: false
+        }).then(() => goToLogin());
+      } else {
+        const errorData = await response.json();
+        Swal.fire('Error', errorData.message || 'Error al registrar', 'error');
+      }
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo conectar con el servidor', 'error');
+    }
   };
 
   return (

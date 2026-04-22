@@ -1,33 +1,28 @@
 {
-  "name": "hoja",
-  "private": true,
-  "version": "0.0.0",
-  "homepage": "https://tu-usuario.github.io/Hoja",
-  "type": "module",
+  "name": "backend-nomina",
+  "version": "1.0.0",
+  "description": "Sistema de nómina con Frontend y Backend unificados",
+  "main": "src/index.js",
   "scripts": {
-    "dev": "vite",
+    "server": "nodemon src/index.js",
+    "client": "vite",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
     "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.5",
-    "react-calendar": "^6.0.1",
-    "react-dom": "^19.2.5",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "mysql2": "^3.9.7",
+    "react": "^18.3.1",
+    "react-calendar": "^5.1.0",
+    "react-dom": "^18.3.1",
     "sweetalert2": "^11.26.24"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "gh-pages": "^6.3.0",
-    "globals": "^17.5.0",
-    "vite": "^8.0.9"
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.14",
+    "vite": "^5.4.21"
   }
 }

@@ -17,7 +17,7 @@ export default function Login({ goToRegister, setUser }) {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.email || !form.password) {
@@ -29,35 +29,33 @@ export default function Login({ goToRegister, setUser }) {
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-
-    const userFound = users.find(
-      (u) =>
-        u.email === form.email &&
-        u.password === form.password
-    );
-
-    if (!userFound) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error de acceso',
-        text: 'El correo o la contraseña son incorrectos.',
+    try {
+      const response = await fetch("http://localhost:5000/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email, password: form.password }),
       });
-      return;
+
+      if (response.ok) {
+        const userFound = await response.json();
+        setRolStyle(userFound.role === "admin" ? "admin" : "worker");
+
+        Swal.fire({
+          icon: 'success',
+          title: `¡Bienvenido, ${userFound.nombre}!`,
+          text: 'Iniciando sesión...',
+          timer: 1500,
+          showConfirmButton: false
+        }).then(() => {
+          setUser(userFound);
+        });
+      } else {
+        const errorData = await response.json();
+        Swal.fire('Error', errorData.message || 'Credenciales incorrectas', 'error');
+      }
+    } catch (error) {
+      Swal.fire('Error', 'No se pudo conectar con el servidor', 'error');
     }
-
-    // 🔥 el rol ya viene del usuario guardado
-    setRolStyle(userFound.role === "admin" ? "admin" : "worker");
-
-    Swal.fire({
-      icon: 'success',
-      title: `¡Bienvenido, ${userFound.nombre}!`,
-      text: 'Iniciando sesión...',
-      timer: 1500,
-      showConfirmButton: false
-    }).then(() => {
-      setUser(userFound);
-    });
   };
 
   return (

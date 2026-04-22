@@ -10,13 +10,11 @@ export default function Dashboard({ user, logout }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEmail, setFiltroEmail] = useState("");
 
-  const [aprobados, setAprobados] = useState(() => {
-    return JSON.parse(localStorage.getItem("aprobaciones")) || {};
-  });
+  const [todosLosUsuarios, setTodosLosUsuarios] = useState([]);
+  const [aprobados, setAprobados] = useState({});
+  const [salarios, setSalarios] = useState({});
 
-  const [salarios, setSalarios] = useState(() => {
-    return JSON.parse(localStorage.getItem("config_salarios")) || {};
-  });
+  const API_URL = "http://localhost:5000/api";
 
   // 💰 HELPER: Formatear moneda a Pesos Colombianos
   const formatCOP = (valor) => {
@@ -37,51 +35,69 @@ export default function Dashboard({ user, logout }) {
   const META = 220;
 
   // 🔥 FUNCIÓN PARA CARGAR REGISTROS SEGÚN EL ROL
-  const loadRegistros = () => {
+  const loadRegistros = async () => {
     if (!user) return;
+    try {
+      const response = await fetch(`${API_URL}/records?email=${user.email}&role=${user.role}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRegistros(data);
+      }
+    } catch (error) {
+      console.error("Error cargando registros:", error);
+    }
+  };
 
-    if (user.role === "admin") {
-      const keys = Object.keys(localStorage).filter((k) =>
-        k.startsWith("registros_")
-      );
-      let todos = [];
-      keys.forEach((k) => {
-        const data = JSON.parse(localStorage.getItem(k)) || [];
-        todos = [...todos, ...data];
-      });
-      setRegistros(todos);
-    } else {
-      const data = JSON.parse(localStorage.getItem(`registros_${user.email}`)) || [];
-      setRegistros(data);
+  const loadConfigs = async () => {
+    try {
+      const resSalaries = await fetch(`${API_URL}/config/salaries`);
+      if (resSalaries.ok) setSalarios(await resSalaries.json());
+
+      const resApprovals = await fetch(`${API_URL}/config/approvals`);
+      if (resApprovals.ok) setAprobados(await resApprovals.json());
+    } catch (error) {
+      console.error("Error cargando configuraciones:", error);
+      Swal.fire('Error', 'No se pudo conectar con el servidor para cargar configuraciones', 'error');
+    }
+  };
+
+  const loadUsersList = async () => {
+    if (user.role !== "admin") return;
+    try {
+      const res = await fetch(`${API_URL}/users`);
+      if (res.ok) setTodosLosUsuarios(await res.json());
+    } catch (error) {
+      console.error("Error cargando lista de usuarios:", error);
     }
   };
 
   // 🔥 CARGAR DATOS AL INICIO O CAMBIO DE USUARIO
   useEffect(() => {
     loadRegistros();
+    loadConfigs();
+    loadUsersList();
   }, [user]); // Dependencia: se ejecuta cuando el usuario cambia
 
   // 🔹 CÁLCULO PROFESIONAL DE NÓMINA
   const calcular = () => {
     if (!form.fecha) return { horas: 0, pago: 0 };
+    
+    // Usamos el sueldo configurado para el usuario actual (o 0 si no hay)
+    const sueldoActual = Number(salarios[user.email] || 0);
+    const VALOR_HORA_BASE = sueldoActual / 220; 
 
-    const salarioBase = salarios[user.email] || 0;
-    const VALOR_HORA_BASE = salarioBase / 220; 
-
-    let horas = parseFloat(form.horas || 0);
+    let horas = Number(form.horas || 0);
     let factorRecargo = 1.0; // Valor por defecto (100%)
 
-    // Convertimos la fecha para obtener el día de la semana (0: Domingo, 6: Sábado)
     const [year, month, day] = form.fecha.split('-').map(Number);
     const fechaObj = new Date(year, month - 1, day);
     const diaSemana = fechaObj.getDay(); 
     const esFinDeSemana = diaSemana === 0 || diaSemana === 6;
 
     if (form.tipo === "vacaciones") {
-      // Las vacaciones cuentan 8 horas pero solo en días hábiles
       horas = esFinDeSemana ? 0 : 8;
       factorRecargo = 1.0;
-    } else if (form.tipo === "domingo" || form.tipo === "festivo") {
+    } else if (form.tipo === "domingo" || form.tipo === "festivo" || diaSemana === 0) {
       // Recargo dominical/festivo legal (75% adicional)
       factorRecargo = 1.75;
     }
@@ -93,7 +109,7 @@ export default function Dashboard({ user, logout }) {
   };
 
   // 🔹 AGREGAR
-  const agregar = () => {
+  const agregar = async () => {
     // Permitimos agregar sin horas si es vacaciones (porque se calculan solas)
     if (!form.fecha || (form.tipo !== "vacaciones" && !form.horas)) {
       Swal.fire({
@@ -116,38 +132,51 @@ export default function Dashboard({ user, logout }) {
     }
 
     const nuevo = {
-      id: Date.now(),
       user: user.email,
       nombre: user.nombre,
       fecha: form.fecha,
       horas: calc.horas,
-      pago: calc.pago, // Guardamos el valor calculado
+      pago: calc.pago,
       tipo: form.tipo,
       proyecto: form.proyecto,
     };
 
-    // Guardar en el storage específico del usuario
-    const userKey = `registros_${user.email}`;
-    const actualData = JSON.parse(localStorage.getItem(userKey)) || [];
-    const updatedData = [...actualData, nuevo];
-    localStorage.setItem(userKey, JSON.stringify(updatedData));
-
-    // Actualizar estado local para la vista
-    loadRegistros(); // Recargar todos los registros para asegurar consistencia
-
-    setForm({
-      fecha: "",
-      horas: "",
-      tipo: "normal",
-      proyecto: "",
-    });
+    try {
+      const response = await fetch(`${API_URL}/records`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nuevo),
+      });
+      
+      if (response.ok) {
+        loadRegistros();
+        setForm({
+          fecha: "",
+          horas: "",
+          tipo: "normal",
+          proyecto: "",
+        });
+      }
+    } catch (error) {
+      Swal.fire("Error", "No se pudo conectar con el servidor", "error");
+    }
   };
 
   // 🔥 TOGGLE APROBACION (EL CHULEO)
-  const toggleAprobacion = (email) => {
-    const nuevosAprobados = { ...aprobados, [email]: !aprobados[email] };
-    setAprobados(nuevosAprobados);
-    localStorage.setItem("aprobaciones", JSON.stringify(nuevosAprobados));
+  const toggleAprobacion = async (email) => {
+    const approved = !aprobados[email];
+    try {
+      const response = await fetch(`${API_URL}/config/approvals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, approved }),
+      });
+      if (response.ok) {
+        setAprobados(await response.json());
+      }
+    } catch (error) {
+      console.error("Error actualizando aprobación:", error);
+    }
   };
 
   // 🔥 ELIMINAR
@@ -166,25 +195,47 @@ export default function Dashboard({ user, logout }) {
     });
 
     if (result.isConfirmed) {
-      const data = JSON.parse(localStorage.getItem(`registros_${ownerEmail}`)) || [];
-      const nuevos = data.filter((r) => r.id !== id);
-      localStorage.setItem(`registros_${ownerEmail}`, JSON.stringify(nuevos));
-      loadRegistros(); // Recargar todos los registros para asegurar consistencia
-      
-      Swal.fire({
-        title: '¡Eliminado!',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: false
-      });
+      try {
+        const response = await fetch(`${API_URL}/records/${id}`, { method: "DELETE" });
+        if (response.ok) {
+          loadRegistros();
+          Swal.fire({
+            title: '¡Eliminado!',
+            icon: 'success',
+            timer: 1500,
+            showConfirmButton: false
+          });
+        }
+      } catch (error) {
+        Swal.fire("Error", "No se pudo eliminar el registro", "error");
+      }
     }
   };
 
   // 🔥 ACTUALIZAR SALARIO (Solo Admin)
   const updateSalario = (email, valor) => {
-    const nuevos = { ...salarios, [email]: parseFloat(valor) || 0 };
-    setSalarios(nuevos);
-    localStorage.setItem("config_salarios", JSON.stringify(nuevos));
+    if (!email) return;
+
+    // 1. Actualizar estado local inmediatamente con el valor del input para que sea fluido
+    setSalarios(prev => ({ ...prev, [email]: valor }));
+
+    // 2. Guardar en la base de datos en segundo plano (Debounce)
+    clearTimeout(window.saveTimer);
+    window.saveTimer = setTimeout(async () => {
+      // Limpiamos y convertimos a número solo para el envío a la DB
+      const cleanValue = String(valor).replace(/[^0-9.]/g, '');
+      const salaryNum = cleanValue === "" ? 0 : Number(cleanValue);
+
+      try {
+        await fetch(`${API_URL}/config/salaries`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, salary: salaryNum }),
+        });
+      } catch (error) {
+        console.error("Error al guardar salario:", error);
+      }
+    }, 500); // Espera 500ms después de que dejes de escribir para enviar a MySQL
   };
 
   // 🔥 ELIMINAR TODO EL HISTORIAL (Solo Admin)
@@ -201,10 +252,15 @@ export default function Dashboard({ user, logout }) {
     });
 
     if (result.isConfirmed) {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith("registros_"));
-      keys.forEach(k => localStorage.removeItem(k));
-      loadRegistros();
-      Swal.fire('¡Vaciado!', 'Se han eliminado todos los registros.', 'success');
+      try {
+        const response = await fetch(`${API_URL}/records-all`, { method: "DELETE" });
+        if (response.ok) {
+          loadRegistros();
+          Swal.fire('¡Vaciado!', 'Se han eliminado todos los registros.', 'success');
+        }
+      } catch (error) {
+        Swal.fire("Error", "No se pudo vaciar el historial", "error");
+      }
     }
   };
 
@@ -243,35 +299,38 @@ export default function Dashboard({ user, logout }) {
 
   // 📅 CÁLCULO DE COSTOS REALES SEGÚN SALARIO CONFIGURADO
   const getCostoRegistro = (reg) => {
-    const salary = salarios[reg.user] || 0;
-    const hourlyRate = salary / 220;
+    const sueldo = Number(salarios[reg.user] || 0);
+    const valorHora = sueldo / 220;
     let factor = 1.0;
-    if (reg.tipo === "domingo" || reg.tipo === "festivo") factor = 1.75;
-    return reg.horas * hourlyRate * factor;
+    
+    if (reg.tipo === "domingo" || reg.tipo === "festivo") {
+      factor = 1.75;
+    }
+    return Number(reg.horas) * valorHora * factor;
   };
 
-  const totalHoras = registrosParaMostrar.reduce((acc, r) => acc + r.horas, 0);
-  const liquidacionProyectada = registrosParaMostrar.reduce((acc, r) => acc + getCostoRegistro(r), 0);
+  // Sumatoria asegurando que los valores sean numéricos
+  const totalHoras = registrosParaMostrar.reduce((acc, r) => acc + Number(r.horas || 0), 0);
+  const liquidacionProyectada = registrosParaMostrar.reduce((acc, r) => acc + Number(getCostoRegistro(r) || 0), 0);
   
   const porcentajeCumplimiento = Math.min((totalHoras / META) * 100, 100).toFixed(1);
   const esMetaCumplida = totalHoras >= META || (filtroEmail ? aprobados[filtroEmail] : aprobados[user.email]);
 
   // 📊 AGRUPAR POR USUARIO PARA ADMIN
-  const usuariosUnicos = [...new Set(registrosDelMes.map((r) => r.user))];
-  const resumenUsuarios = usuariosUnicos.map((email) => {
+  const resumenUsuarios = todosLosUsuarios.map((u) => {
+    const email = u.email;
     const registrosUser = registrosDelMes.filter((r) => r.user === email);
-    const total = registrosUser.reduce((acc, r) => acc + r.horas, 0);
+    const total = registrosUser.reduce((acc, r) => acc + Number(r.horas || 0), 0);
     const pagoTotal = registrosUser.reduce((acc, r) => acc + getCostoRegistro(r), 0);
-    const nombre = registrosUser[0]?.nombre || email;
     const rendimiento = ((total / META) * 100).toFixed(1);
-    return { email, nombre, total, honorarios: pagoTotal, rendimiento };
+    return { email, nombre: u.nombre, total, honorarios: pagoTotal, rendimiento };
   });
 
   // 📊 AGRUPAR POR PROYECTO PARA ADMIN
   const proyectosUnicos = [...new Set(registrosDelMes.map((r) => r.proyecto || "General/Sin Proyecto"))];
   const resumenProyectos = proyectosUnicos.map((nombreProyecto) => {
     const registrosProyecto = registrosDelMes.filter((r) => (r.proyecto || "General/Sin Proyecto") === nombreProyecto);
-    const horasProyecto = registrosProyecto.reduce((acc, r) => acc + r.horas, 0);
+    const horasProyecto = registrosProyecto.reduce((acc, r) => acc + Number(r.horas || 0), 0);
     const inversionProyecto = registrosProyecto.reduce((acc, r) => acc + getCostoRegistro(r), 0);
     return { nombre: nombreProyecto, horas: horasProyecto, costo: inversionProyecto };
   });
@@ -433,9 +492,11 @@ export default function Dashboard({ user, logout }) {
                   <td>
                     <input 
                       type="number" 
+                      step="1000"
                       className="search" 
-                      style={{ width: '100px', margin: 0 }}
-                      value={salarios[u.email] || ""} 
+                      style={{ width: '180px', margin: 0, fontSize: '1.1rem' }} 
+                      placeholder="Ej: 1300000"
+                      value={salarios[u.email] ?? ""} 
                       onChange={(e) => updateSalario(u.email, e.target.value)}
                     />
                   </td>
@@ -516,7 +577,7 @@ export default function Dashboard({ user, logout }) {
               <tr key={r.id}>
                 <td>{r.nombre}</td>
                 <td>{r.user}</td>
-                <td>{r.fecha.split("-").reverse().join("/")}</td>
+                <td>{r.fecha.split("T")[0].split("-").reverse().join("/")}</td>
                 <td>{r.horas}</td>
                 <td>{r.tipo}</td>
                 <td>{r.proyecto || "-"}</td>
@@ -552,7 +613,7 @@ export default function Dashboard({ user, logout }) {
             <tr key={r.id}>
               <td>{r.nombre}</td>
               <td>{r.user}</td>
-              <td>{r.fecha.split("-").reverse().join("/")}</td>
+              <td>{r.fecha.split("T")[0].split("-").reverse().join("/")}</td>
               <td>{r.horas}</td>
               <td>{r.tipo}</td>
               <td>{r.proyecto || "-"}</td>
