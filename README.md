@@ -1,16 +1,84 @@
-# React + Vite
+# 💰 Nómina Pro - Gestión Empresarial Integrada
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema integral para la gestión de horas laboradas, cálculo de nómina y análisis de proyectos, optimizado específicamente para la legislación laboral de **Colombia (COP)**. 
 
-Currently, two official plugins are available:
+Este proyecto utiliza un stack moderno con **React** en el frontend, **Node.js/Express** en el backend y **MySQL** como base de datos persistente.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Características Principales
 
-## React Compiler
+- **Autenticación Segura:** Registro e inicio de sesión con roles diferenciados (Administrador y Trabajador).
+- **Gestión de Horas:** Registro detallado de jornadas (Normal, Festivo, Sábado, Domingo, Vacaciones).
+- **Lógica de Nómina Colombiana:** 
+    - Cálculo basado en el divisor de **220 horas mensuales**.
+    - Recargos automáticos del **75% (factor 1.75)** para domingos y festivos.
+    - Cálculo automático de horas de vacaciones (8h en días hábiles).
+- **Panel de Administrador:** 
+    - Visualización de métricas en tiempo real (KPIs).
+    - Asignación dinámica de salarios base por trabajador.
+    - Sistema de aprobación manual ("chuleo").
+    - Análisis de inversión por proyecto.
+- **Persistencia Total:** Migración completa de `localStorage` a **MySQL** para seguridad y multiusuario.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Requisitos Técnicos
 
-## Expanding the ESLint configuration
+- **Node.js:** Versión 18 o superior.
+- **Base de Datos:** MySQL (XAMPP, HeidiSQL o similar).
+- **Navegador:** Chrome, Edge o Firefox.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 📦 Instalación
+
+1. **Clonar o descargar** el repositorio en tu carpeta local.
+2. Abrir una terminal en la carpeta raíz del proyecto y ejecutar:
+   ```bash
+   npm install
+   ```
+
+## 🗄️ Configuración de la Base de Datos
+
+1. Abre tu gestor de base de datos (ej. HeidiSQL).
+2. Crea una base de datos llamada `nomina_app`.
+3. Ejecuta el siguiente script para crear las tablas necesarias:
+
+```sql
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('admin', 'trabajador') NOT NULL
+);
+
+CREATE TABLE records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_email VARCHAR(255) NOT NULL,
+    nombre VARCHAR(255) NOT NULL,
+    fecha DATE NOT NULL,
+    horas DECIMAL(10, 2) NOT NULL,
+    pago DECIMAL(15, 2) NOT NULL,
+    tipo VARCHAR(50) NOT NULL,
+    proyecto VARCHAR(255),
+    FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
+);
+
+CREATE TABLE user_salaries (
+    user_email VARCHAR(255) PRIMARY KEY,
+    salary DECIMAL(15, 2) NOT NULL,
+    FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
+);
+```
+
+## 🚦 Ejecución del Proyecto
+
+Para levantar tanto el servidor (Backend) como la aplicación (Frontend) simultáneamente, ejecuta:
+
+```bash
+npm run dev
+```
+
+- **Frontend:** `http://localhost:5173`
+- **Backend:** `http://localhost:5000`
+
+## ⚙️ Lógica de Cálculo
+
+El sistema calcula el costo de cada registro mediante la fórmula:
+`Costo = (Salario Base / 220) * Horas * FactorRecargo`
