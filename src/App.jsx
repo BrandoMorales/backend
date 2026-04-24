@@ -43,8 +43,8 @@ function App() {
         )}
       </div>
       <footer className="footer">
-        <p>&copy; {new Date().getFullYear()} <strong>Nómina Pro</strong> - Gestión Empresarial Integrada</p>
-        <p>Sistema optimizado para la legislación laboral de <strong>Colombia (COP)</strong></p>
+        <p>&copy; {new Date().getFullYear()} <strong>Nómina</strong></p>
+        <p>Sistema hecho para el calculo de nominas <strong>Colombia (COP)</strong></p>
       </footer>
     </div>
   );
