@@ -555,6 +555,11 @@ export default function Dashboard({ user, logout }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEmail, setFiltroEmail] = useState("");
 
+  // Estado para el modal de edición
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+
   const [todosLosUsuarios, setTodosLosUsuarios] = useState([]);
   const [aprobados, setAprobados] = useState({});
   const [salarios, setSalarios] = useState({});
@@ -683,12 +688,24 @@ export default function Dashboard({ user, logout }) {
 
   // 🔹 AGREGAR
   const agregar = async () => {
-    // Permitimos agregar sin horas si es vacaciones o festivo
-    if (!form.fecha || (!form.horaEntrada && form.tipo !== "vacaciones" && form.tipo !== "festivo")) {
+    const esTipoEspecial = form.tipo === "vacaciones" || form.tipo === "festivo";
+
+    // Validación simplificada: la fecha siempre es requerida.
+    if (!form.fecha) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Fecha requerida',
+        text: 'Por favor, selecciona una fecha para el registro.',
+      });
+      return;
+    }
+
+    // Si NO es un tipo especial, se validan todos los campos como antes.
+    if (!esTipoEspecial && (!form.proyecto || !form.projectNumber || !form.client || !form.horaEntrada || !form.horaSalida)) {
       Swal.fire({
         icon: 'error',
         title: 'Campos incompletos',
-        text: 'Por favor completa todos los campos obligatorios.',
+        text: 'Para registros normales, debes completar fecha, horas, proyecto, número de proyecto y cliente.',
       });
       return;
     }
@@ -696,7 +713,7 @@ export default function Dashboard({ user, logout }) {
     const calc = calcular();
 
     // Validar que no se intenten registrar horas negativas o cero (excepto en vacaciones automáticas o festivos)
-    if (calc.horas <= 0 && form.tipo !== "vacaciones" && form.tipo !== "festivo") {
+    if (calc.horas <= 0 && !esTipoEspecial) {
       Swal.fire({
         icon: 'warning',
         title: 'Horas inválidas',
@@ -737,9 +754,9 @@ export default function Dashboard({ user, logout }) {
       horas: calc.horas,
       pago: calc.pago,
       tipo: form.tipo,
-      projectNumber: form.tipo === "festivo" ? (form.projectNumber || "N/A") : form.projectNumber,
-      client: form.tipo === "festivo" ? (form.client || "N/A") : form.client,
-      proyecto: form.tipo === "festivo" ? (form.proyecto || "Día Festivo") : form.proyecto,
+      projectNumber: esTipoEspecial ? "N/A" : form.projectNumber,
+      client: esTipoEspecial ? "N/A" : form.client,
+      proyecto: esTipoEspecial ? (form.tipo === "festivo" ? "Día Festivo" : "Vacaciones") : form.proyecto,
     };
 
     try {
@@ -772,6 +789,83 @@ export default function Dashboard({ user, logout }) {
       Swal.fire("Error", "No se pudo conectar con el servidor", "error");
     }
   };
+
+  // 🔹 EDITAR (Abrir Modal)
+  const handleEdit = (record) => {
+    setEditingRecord(record);
+    setEditForm({ ...record });
+  };
+
+  // 🔹 GUARDAR EDICIÓN
+  const guardarEdicion = async () => {
+    if (!editForm) return;
+
+    // --- INICIO: Lógica de recálculo ---
+    const sueldoUsuario = Number(salarios[editingRecord.user] || 0);
+    const VALOR_HORA_BASE = sueldoUsuario / META;
+
+    let horasCalculadas = 0;
+    let factorRecargo = 1.0;
+
+    // Recalcular horas si no es un tipo especial
+    if (editForm.tipo !== "vacaciones" && editForm.tipo !== "festivo" && editForm.hora_entrada && editForm.hora_salida) {
+      const [hIn, mIn] = editForm.hora_entrada.split(":").map(Number);
+      const [hOut, mOut] = editForm.hora_salida.split(":").map(Number);
+      const inicioDecimal = hIn + mIn / 60;
+      const finDecimal = hOut + mOut / 60;
+      horasCalculadas = Math.max(0, finDecimal - inicioDecimal - 1); // Descuento de 1h de almuerzo
+    }
+
+    // Ajustar horas y factor para tipos especiales
+    const fechaParts = editForm.fecha.split('T')[0].split('-');
+    const fechaObj = new Date(fechaParts[0], fechaParts[1] - 1, fechaParts[2]);
+    const diaSemana = fechaObj.getDay();
+    const esFinDeSemana = diaSemana === 0 || diaSemana === 6;
+
+    if (editForm.tipo === "vacaciones") {
+      horasCalculadas = esFinDeSemana ? 0 : 9;
+    } else if (editForm.tipo === "festivo") {
+      horasCalculadas = 0;
+    } else if (editForm.tipo === "domingo" || diaSemana === 0) {
+      factorRecargo = 1.75;
+    }
+
+    const pagoCalculado = horasCalculadas * VALOR_HORA_BASE * factorRecargo;
+    // --- FIN: Lógica de recálculo ---
+
+    const updatedRecordData = {
+      ...editForm,
+      // Sobrescribimos con los valores recalculados
+      horas: horasCalculadas,
+      pago: pagoCalculado,
+    };
+
+    try {
+      const response = await fetch(`${API_URL}/records/${editingRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedRecordData),
+      });
+
+      if (response.ok) {
+        await loadRegistros(); // Recargamos todos los registros
+        setEditingRecord(null); // Cerramos el modal
+        Swal.fire('¡Actualizado!', 'El registro ha sido modificado.', 'success');
+      } else {
+        const errData = await response.json();
+        Swal.fire('Error', errData.message || 'No se pudo actualizar el registro.', 'error');
+      }
+    } catch (error) {
+      Swal.fire('Error de Conexión', 'No se pudo conectar con el servidor.', 'error');
+    }
+  };
+
+  // Cerrar el modal de edición
+  const cancelEdit = () => {
+    setEditingRecord(null);
+    setEditForm(null);
+  };
+
 
   // 🔥 TOGGLE APROBACION (EL CHULEO)
   const toggleAprobacion = async (email) => {
@@ -978,6 +1072,8 @@ export default function Dashboard({ user, logout }) {
 
   return (
     <div className="container">
+
+      <h1 style={{ textAlign: 'center', color: '#030303', marginBottom: '25px' }}>Nómina SYA Santander y Asociados</h1>
 
       {/* HEADER */}
       <div className="header">
@@ -1268,7 +1364,8 @@ export default function Dashboard({ user, logout }) {
                 <td>{r.proyecto || "-"}</td>
                 <td>{r.client || "-"}</td>
                 {user.role === "admin" && (
-                  <td>
+                  <td style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                    <button className="warning" style={{ padding: '5px 10px' }} onClick={() => handleEdit(r)}>✏️</button>
                     <button className="danger" onClick={() => eliminar(r.id, r.user)}>❌</button>
                   </td>
                 )}
@@ -1297,7 +1394,7 @@ export default function Dashboard({ user, logout }) {
             <th>N° Proyecto</th> {/* Nuevo */}
             <th>Nombre Proyecto</th>
             <th>Contratante</th> {/* Nuevo */}
-            {user.role === "admin" && <th>Acción</th>}
+            {user.role === "admin" && <th>Acciones</th>}
           </tr>
         </thead>
         <tbody>
@@ -1314,7 +1411,8 @@ export default function Dashboard({ user, logout }) {
               <td>{r.proyecto || "-"}</td>
               <td>{r.client || "-"}</td>
               {user.role === "admin" && (
-                <td>
+                <td style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                  <button className="warning" style={{ padding: '5px 10px' }} onClick={() => handleEdit(r)}>✏️</button>
                   <button className="danger" onClick={() => eliminar(r.id, r.user)}>❌</button>
                 </td>
               )}
@@ -1323,6 +1421,72 @@ export default function Dashboard({ user, logout }) {
         </tbody>
       </table>
       </div>
+
+      {/* MODAL DE EDICIÓN */}
+      {editingRecord && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px', background: '#111827' }}>
+            <h3 style={{ color: 'white' }}>Editando Registro</h3>
+            <div className="form" style={{ gridTemplateColumns: '1fr 1fr', background: 'transparent', padding: 0, marginTop: '20px' }}>
+              <input
+                type="date"
+                value={editForm.fecha.split('T')[0]}
+                onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })}
+              />
+              <select
+                value={editForm.tipo}
+                onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}
+              >
+                <option value="normal">Normal</option>
+                <option value="festivo">Festivo</option>
+                <option value="sabado">Sábado</option>
+                <option value="domingo">Domingo</option>
+                <option value="vacaciones">Vacaciones</option>
+              </select>
+              <input
+                type="time"
+                value={editForm.hora_entrada}
+                onChange={(e) => setEditForm({ ...editForm, hora_entrada: e.target.value })}
+                disabled={editForm.tipo === "vacaciones" || editForm.tipo === "festivo"}
+              />
+              <input
+                type="time"
+                value={editForm.hora_salida}
+                onChange={(e) => setEditForm({ ...editForm, hora_salida: e.target.value })}
+                disabled={editForm.tipo === "vacaciones" || editForm.tipo === "festivo"}
+              />
+              <select
+                style={{ gridColumn: '1 / -1' }}
+                value={editForm.proyecto}
+                onChange={(e) => setEditForm({ ...editForm, proyecto: e.target.value })}
+              >
+                <option value="">Seleccione Proyecto</option>
+                {LISTA_PROYECTOS.map((p, index) => (
+                  <option key={index} value={p}>{p}</option>
+                ))}
+              </select>
+              <input
+                placeholder="Número de Proyecto"
+                value={editForm.projectNumber}
+                onChange={(e) => setEditForm({ ...editForm, projectNumber: e.target.value })}
+              />
+              <select
+                value={editForm.client}
+                onChange={(e) => setEditForm({ ...editForm, client: e.target.value })}
+              >
+                <option value="">Seleccione el cliente</option>
+                {LISTA_CLIENTES.map((c, index) => (
+                  <option key={index} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={cancelEdit}>Cancelar</button>
+              <button onClick={guardarEdicion}>Guardar Cambios</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

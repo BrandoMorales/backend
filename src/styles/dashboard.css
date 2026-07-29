@@ -65,6 +65,16 @@ button:hover {
   background: #b91c1c;
 }
 
+/* 🟡 BOTÓN EDITAR */
+.warning {
+  background: #f59e0b;
+}
+
+.warning:hover {
+  background: #d97706;
+}
+
+
 /* 🧾 FORMULARIO */
 .form {
   display: grid;
@@ -328,7 +338,7 @@ tr:nth-child(even) {
   background: #1e293b;
   padding: 30px;
   border-radius: 16px;
-  text-align: center;
+  /* text-align: center; */ /* Lo quitamos para que el form se alinee bien */
   max-width: 400px;
   border: 1px solid #334155;
 }

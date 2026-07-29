@@ -67,7 +67,7 @@ export default function Register({ goToLogin }) {
 
   return (
     <div className={`card ${rolStyle}`}>
-      <h2>Registro</h2>
+      <h2>Registro - Nómina SYA</h2>
 
       <form onSubmit={handleSubmit}>
         <input

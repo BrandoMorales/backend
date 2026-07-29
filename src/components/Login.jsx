@@ -60,7 +60,7 @@ export default function Login({ goToRegister, setUser }) {
 
   return (
     <div className={`card ${rolStyle}`}>
-      <h2>Iniciar Sesión</h2>
+      <h2>Nómina SYA Santander y Asociados</h2>
 
       <form onSubmit={handleSubmit}>
         <input

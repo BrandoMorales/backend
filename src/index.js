@@ -114,6 +114,22 @@ app.post('/api/records', async (req, res) => {
   }
 });
 
+app.put('/api/records/:id', async (req, res) => {
+  const { id } = req.params;
+  // Extraemos todos los campos que pueden ser editados
+  const { fecha, hora_entrada, hora_salida, horas, pago, tipo, proyecto, projectNumber, client } = req.body;
+  try {
+    await pool.execute(
+      'UPDATE records SET fecha = ?, hora_entrada = ?, hora_salida = ?, horas = ?, pago = ?, tipo = ?, proyecto = ?, projectNumber = ?, client = ? WHERE id = ?',
+      [fecha, hora_entrada, hora_salida, horas, pago, tipo, proyecto, projectNumber, client, id]
+    );
+    res.json({ message: 'Registro actualizado con éxito.' });
+  } catch (error) {
+    console.error('Error al actualizar registro:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 app.delete('/api/records/:id', async (req, res) => {
   const { id } = req.params;
   try {
